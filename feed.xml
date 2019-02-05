@@ -11,35 +11,6 @@
     <generator>Jekyll v3.3.1</generator>
     
       <item>
-        <title>My workflow for keeping encrypted data in S3</title>
-        <description>&lt;h2 id=&quot;test-with-reference&quot;&gt;Test with reference&lt;/h2&gt;
-&lt;p&gt;I found a good read to get started was &lt;a href=&quot;https://www.flockport.com/how-linux-containers-work/&quot;&gt;an introduction on Linux Containers&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h4 id=&quot;embed-code&quot;&gt;Embed code&lt;/h4&gt;
-
-&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;&lt;span class=&quot;k&quot;&gt;function &lt;/span&gt;say_hello&lt;span class=&quot;o&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
-	&lt;span class=&quot;nb&quot;&gt;echo &lt;/span&gt;hallo
-&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
-
-&lt;h3 id=&quot;quote&quot;&gt;Quote&lt;/h3&gt;
-&lt;blockquote&gt;
-  &lt;p&gt;It is said
-Do practice writing every day&lt;/p&gt;
-&lt;/blockquote&gt;
-
-</description>
-        <pubDate>Mon, 21 Jan 2019 04:39:12 -0800</pubDate>
-        <link>http://localhost:4000/devops/s3/2019/01/21/template.html</link>
-        <guid isPermaLink="true">http://localhost:4000/devops/s3/2019/01/21/template.html</guid>
-        
-        
-        <category>devops</category>
-        
-        <category>s3</category>
-        
-      </item>
-    
-      <item>
         <title>Store client-side encrypted data in the cloud using rclone and encfs</title>
         <description>&lt;p&gt;Everyone has data she would not like to share.
 And everyone has data she would not like to loose.&lt;/p&gt;
