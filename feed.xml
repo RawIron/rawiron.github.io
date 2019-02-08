@@ -6,12 +6,219 @@
 </description>
     <link>http://localhost:4000/</link>
     <atom:link href="http://localhost:4000/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Mon, 04 Feb 2019 21:07:27 -0800</pubDate>
-    <lastBuildDate>Mon, 04 Feb 2019 21:07:27 -0800</lastBuildDate>
+    <pubDate>Thu, 07 Feb 2019 21:32:58 -0800</pubDate>
+    <lastBuildDate>Thu, 07 Feb 2019 21:32:58 -0800</lastBuildDate>
     <generator>Jekyll v3.3.1</generator>
     
       <item>
-        <title>Store client-side encrypted data in the cloud using rclone and encfs</title>
+        <title>ecryptfs, rclone - Store client-side encrypted data in the cloud</title>
+        <description>&lt;p&gt;This is the second post on how to encrypt data on the client and then sync the data to cloud storage.
+The &lt;a href=&quot;https://rawiron.github.io/devops/s3/2019/01/21/s3-encrypted.html&quot;&gt;first part&lt;/a&gt; uses &lt;em&gt;rclone&lt;/em&gt;, &lt;em&gt;awscli&lt;/em&gt; and &lt;em&gt;encfs&lt;/em&gt;.&lt;/p&gt;
+
+&lt;p&gt;In this part the tools are:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;terraform&lt;/li&gt;
+  &lt;li&gt;ecryptfs&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://rclone.org/&quot;&gt;rclone&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;setup&quot;&gt;Setup&lt;/h2&gt;
+
+&lt;h3 id=&quot;s3&quot;&gt;S3&lt;/h3&gt;
+
+&lt;p&gt;Install &lt;em&gt;terraform&lt;/em&gt; and add the path to the executable to the &lt;em&gt;PATH&lt;/em&gt; variable.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;sudo apt install zip
+
+wget https://releases.hashicorp.com/terraform/0.11.11/terraform_0.11.11_linux_amd64.zip
+unzip terraform_0.11.11_linux_amd64.zip
+
+&lt;span class=&quot;nb&quot;&gt;export &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;PATH&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;PATH&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;$(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;pwd&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;The following steps are done with &lt;em&gt;terraform&lt;/em&gt; and not with &lt;em&gt;awscli&lt;/em&gt;.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;create a S3 bucket&lt;/li&gt;
+  &lt;li&gt;create a role with read and write access to this bucket&lt;/li&gt;
+  &lt;li&gt;generate the access key pair for this role&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Copy the HCL-script into a file called &lt;em&gt;storage.tf&lt;/em&gt;.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;provider &lt;span class=&quot;s2&quot;&gt;&quot;aws&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  access_key &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&amp;lt;ACCESS_KEY_HERE&amp;gt;&quot;&lt;/span&gt;
+  secret_key &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&amp;lt;SECRET_KEY_HERE&amp;gt;&quot;&lt;/span&gt;
+  region     &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;ca-central-1&quot;&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+
+resource &lt;span class=&quot;s2&quot;&gt;&quot;aws_s3_bucket&quot;&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;private-storage&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  bucket &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;private-data-storage-9e9ace&quot;&lt;/span&gt;
+  acl    &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;private&quot;&lt;/span&gt;
+  region &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;ca-central-1&quot;&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+
+resource &lt;span class=&quot;s2&quot;&gt;&quot;aws_iam_user&quot;&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;private-storage&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  name &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;s3-storage&quot;&lt;/span&gt;
+  path &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;/home/&quot;&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+
+resource &lt;span class=&quot;s2&quot;&gt;&quot;aws_iam_user_policy&quot;&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;private-storage&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  name &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;s3-storage-rw&quot;&lt;/span&gt;
+  user &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;aws_iam_user&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.private-storage.name&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;
+
+  policy &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;sh&quot;&gt;&amp;lt;&amp;lt;EOF
+{
+  &quot;Version&quot;: &quot;2012-10-17&quot;,
+  &quot;Statement&quot;: [
+    {
+      &quot;Effect&quot;: &quot;Allow&quot;,
+      &quot;Action&quot;: [
+        &quot;s3:ListBucket&quot;,
+        &quot;s3:DeleteObject&quot;,
+        &quot;s3:GetObject&quot;,
+        &quot;s3:PutObject&quot;,
+        &quot;s3:PutObjectAcl&quot;],
+      &quot;Resource&quot;: [
+        &quot;arn:aws:s3:::private-data-storage-9e9ace/*&quot;,
+        &quot;arn:aws:s3:::private-data-storage-9e9ace&quot;
+      ]
+    }
+  ]
+}
+EOF
+&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+
+resource &lt;span class=&quot;s2&quot;&gt;&quot;aws_iam_access_key&quot;&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;private-storage&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  user &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;aws_iam_user&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.private-storage.name&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+
+output &lt;span class=&quot;s2&quot;&gt;&quot;secret&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  value &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;aws_iam_access_key&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.private-storage.id&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;, &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;aws_iam_access_key&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.private-storage.secret&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Use &lt;em&gt;terraform&lt;/em&gt; to create the cloud resources used in this post.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;terraform init
+terraform apply&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;h3 id=&quot;rclone&quot;&gt;rclone&lt;/h3&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;sudo apt install rclone&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Create a config file like the one below in &lt;em&gt;~/.config/rclone/rclone.conf&lt;/em&gt;.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;mkdir -p ~/.config/rclone
+cat &lt;span class=&quot;sh&quot;&gt;&amp;lt;&amp;lt;RCLONE_CONF &amp;gt;&amp;gt;~/.config/rclone/rclone.conf
+[s3-ca]
+type = s3
+env_auth = false
+access_key_id = &amp;lt;replace-me-with-your-access-key&amp;gt;
+secret_access_key = &amp;lt;replace-me-with-your-secret-key&amp;gt;
+region = ca-central-1
+endpoint = 
+location_constraint = ca-central-1
+acl = private
+server_side_encryption = 
+storage_class = 
+&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;RCLONE_CONF&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;h3 id=&quot;ecryptfs&quot;&gt;ecryptfs&lt;/h3&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;sudo apt install -y ecryptfs-utils&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://www.howtoforge.com/tutorial/how-to-encrypt-directories-with-ecryptfs-on-ubuntu-16-04/&quot;&gt;This&lt;/a&gt; is a short and good how-to for &lt;em&gt;ecryptfs&lt;/em&gt;.
+A long key (password) for the encryption is a good idea.
+Any password safe is the best place to keep the key.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;mkdir ~/cloud-encrypted
+
+sudo mount -t ecryptfs ~/cloud-encrypted ~/cloud-encrypted
+
+Passphrase: 
+Select cipher: 
+ 1&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; aes: blocksize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 16; min keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 16; max keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 32
+ 2&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; blowfish: blocksize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 8; min keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 16; max keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 56
+ 3&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; des3_ede: blocksize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 8; min keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 24; max keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 24
+ 4&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; twofish: blocksize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 16; min keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 16; max keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 32
+ 5&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; cast6: blocksize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 16; min keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 16; max keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 32
+ 6&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; cast5: blocksize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 8; min keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 5; max keysize &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 16
+Selection &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;aes]: 
+Select key bytes: 
+ 1&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; 16
+ 2&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; 32
+ 3&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; 24
+Selection &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;16]: 
+Enable plaintext passthrough &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;y/n&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;n]: 
+Enable filename encryption &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;y/n&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;n]: y
+Filename Encryption Key &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;FNEK&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; Signature &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;13e8b1bc6090e91d]: 
+Attempting to mount with the following options:
+  ecryptfs_unlink_sigs
+  &lt;span class=&quot;nv&quot;&gt;ecryptfs_fnek_sig&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;13e8b1bc6090e91d
+  &lt;span class=&quot;nv&quot;&gt;ecryptfs_key_bytes&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;16
+  &lt;span class=&quot;nv&quot;&gt;ecryptfs_cipher&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;aes
+  &lt;span class=&quot;nv&quot;&gt;ecryptfs_sig&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;13e8b1bc6090e91d
+WARNING: Based on the contents of &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;/root/.ecryptfs/sig-cache.txt],
+it looks like you have never mounted with this key 
+before. This could mean that you have typed your 
+passphrase wrong.
+
+Would you like to proceed with the mount &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;yes/no&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;? : yes
+Would you like to append sig &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;13e8b1bc6090e91d] to
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;/root/.ecryptfs/sig-cache.txt] 
+&lt;span class=&quot;k&quot;&gt;in &lt;/span&gt;order to avoid this warning &lt;span class=&quot;k&quot;&gt;in &lt;/span&gt;the future &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;yes/no&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;? : no
+Not adding sig to user sig cache file; continuing with mount.
+Mounted eCryptfs&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;The mount is ready to use.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;findmnt&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;h2 id=&quot;encrypt-decrypt-and-access-the-data&quot;&gt;Encrypt, Decrypt and Access the data&lt;/h2&gt;
+
+&lt;p&gt;The encrypted data can be viewed in clear-text when the &lt;em&gt;ecryptfs&lt;/em&gt; filesystem is mounted.
+To hide the data simply unmount the &lt;em&gt;ecryptfs&lt;/em&gt; filesystem.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;sudo umount ~/cloud-encrypted&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;When the encrypted data is needed, mount &lt;em&gt;ecryptfs&lt;/em&gt;.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;sudo mount -t ecryptfs ~/cloud-encrypted ~/cloud-encrypted&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Manage the data as usual in the &lt;em&gt;~/cloud-encrypted&lt;/em&gt; directory.&lt;/p&gt;
+
+&lt;h2 id=&quot;sync-the-data-to-and-from-s3&quot;&gt;Sync the data to and from S3&lt;/h2&gt;
+
+&lt;p&gt;&lt;em&gt;rclone&lt;/em&gt; is the tool to transfer the data between the client and the cloud storage.&lt;/p&gt;
+
+&lt;h3 id=&quot;transfer-data&quot;&gt;Transfer Data&lt;/h3&gt;
+
+&lt;p&gt;Copy the encrypted data to the cloud.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;rclone copy ~/cloud-encrypted s3-ca:private-data-storage-9e9ace&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Restore the encrypted data from the cloud.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;rclone copy s3-ca:private-data-storage-9e9ace ~/cloud-encrypted&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;h2 id=&quot;cleanup&quot;&gt;Cleanup&lt;/h2&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;terraform destroy&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+</description>
+        <pubDate>Sat, 02 Feb 2019 04:39:12 -0800</pubDate>
+        <link>http://localhost:4000/devops/s3/2019/02/02/s3-ecryptfs.html</link>
+        <guid isPermaLink="true">http://localhost:4000/devops/s3/2019/02/02/s3-ecryptfs.html</guid>
+        
+        
+        <category>devops</category>
+        
+        <category>s3</category>
+        
+      </item>
+    
+      <item>
+        <title>encfs, rclone - Store client-side encrypted data in the cloud</title>
         <description>&lt;p&gt;Everyone has data she would not like to share.
 And everyone has data she would not like to loose.&lt;/p&gt;
 
